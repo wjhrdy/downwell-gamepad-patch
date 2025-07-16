@@ -1,0 +1,322 @@
+--- downwell_orig/smali/com/devolver/downwell_rerelease/GamepadHandler_API12.smali	2025-07-16 12:59:10
++++ downwell_fresh/smali/com/devolver/downwell_rerelease/GamepadHandler_API12.smali	2025-07-16 12:41:33
+@@ -23,7 +23,13 @@
+     .end annotation
+ .end field
+ 
++# Static fields for tracking direction button states with reference counting
++.field private static leftPressedCount:I = 0
++.field private static rightPressedCount:I = 0
++.field private static leftTouchActive:Z = false
++.field private static rightTouchActive:Z = false
+ 
++
+ # direct methods
+ .method public constructor <init>()V
+     .locals 1
+@@ -121,7 +127,7 @@
+ .end method
+ 
+ .method public HandleKeyEvent(ILandroid/view/KeyEvent;)Z
+-    .locals 2
++    .locals 7
+     .annotation build Landroid/annotation/SuppressLint;
+         value = {
+             "MissingPermission"
+@@ -137,11 +143,216 @@
+ 
+     if-eqz p1, :cond_1
+ 
+-    .line 273
++    # Intercept specific controller buttons for touch events
++    invoke-virtual {p2}, Landroid/view/KeyEvent;->getKeyCode()I
++    move-result v1
+     invoke-virtual {p2}, Landroid/view/KeyEvent;->getAction()I
++    move-result v2
+ 
+-    move-result v1
++    # Check for D-pad left (21)
++    const/16 v3, 0x15
++    if-ne v1, v3, :check_dpad_right
++    if-nez v2, :dpad_left_up
++    # D-pad left down - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleLeftPress()V
++    return v0
++    :dpad_left_up
++    # D-pad left up - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleLeftRelease()V
++    return v0
++
++    :check_dpad_right
++    # Check for D-pad right (22)
++    const/16 v3, 0x16
++    if-ne v1, v3, :check_dpad_up
++    if-nez v2, :dpad_right_up
++    # D-pad right down - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleRightPress()V
++    return v0
++    :dpad_right_up
++    # D-pad right up - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleRightRelease()V
++    return v0
++
++    :check_dpad_up
++    # Check for D-pad up (19) - triggers left movement
++    const/16 v3, 0x13
++    if-ne v1, v3, :check_dpad_down
++    if-nez v2, :dpad_up_up
++    # D-pad up down - use priority logic for left
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleLeftPress()V
++    return v0
++    :dpad_up_up
++    # D-pad up up - use priority logic for left
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleLeftRelease()V
++    return v0
++
++    :check_dpad_down
++    # Check for D-pad down (20) - triggers right movement
++    const/16 v3, 0x14
++    if-ne v1, v3, :check_button_a
++    if-nez v2, :dpad_down_up
++    # D-pad down down - use priority logic for right
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleRightPress()V
++    return v0
++    :dpad_down_up
++    # D-pad down up - use priority logic for right
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleRightRelease()V
++    return v0
++
++    :check_button_a
++    # Check for Button A (96)
++    const/16 v3, 0x60
++    if-ne v1, v3, :check_button_b
++    if-nez v2, :button_a_up
++    # Use exact coordinates: jump at (414, 690)
++    const/high16 v3, 0x43cf0000    # 414.0f
++    const/high16 v4, 0x442c0000    # 688.0f
++    const/4 v5, 0x0    # ACTION_DOWN
++    const/4 v6, 0x3    # pointer id 3 for jump button
++    invoke-static {v5, v6, v3, v4}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    return v0
++    :button_a_up
++    # Button A up - calculate jump button position (414/480 = 0.8625 from left, 690/800 = 0.8625 from top)
++    invoke-static {}, Lcom/yoyogames/runner/RunnerJNILib;->getGuiWidth()I
++    move-result v3
++    invoke-static {}, Lcom/yoyogames/runner/RunnerJNILib;->getGuiHeight()I
++    move-result v4
++    int-to-float v3, v3
++    const v1, 0x3f5d0000    # 0.8625f (414/480)
++    mul-float/2addr v3, v1
++    int-to-float v4, v4
++    const v1, 0x3f5d0000    # 0.8625f (690/800)
++    mul-float/2addr v4, v1
++    const/4 v5, 0x1    # ACTION_UP
++    const/4 v6, 0x3    # pointer id 3 for jump button
++    invoke-static {v5, v6, v3, v4}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    return v0
++
++    :check_button_b
++    # Check for Button B (97)
++    const/16 v3, 0x61
++    if-ne v1, v3, :check_button_x
++    if-nez v2, :button_b_up
++    # Use exact coordinates: jump at (414, 688)
++    const/high16 v3, 0x43cf0000    # 414.0f
++    const/high16 v4, 0x442c0000    # 688.0f
++    const/4 v5, 0x0    # ACTION_DOWN
++    const/4 v6, 0x3    # pointer id 3 for Button B (same as Button A)
++    invoke-static {v5, v6, v3, v4}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    return v0
++    :button_b_up
++    # Use exact coordinates: jump at (414, 688)
++    const/high16 v3, 0x43cf0000    # 414.0f
++    const/high16 v4, 0x442c0000    # 688.0f
++    const/4 v5, 0x1    # ACTION_UP
++    const/4 v6, 0x3    # pointer id 3 for Button B (same as Button A)
++    invoke-static {v5, v6, v3, v4}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    return v0
++
++    :check_button_x
++    # Check for Button X (99)
++    const/16 v3, 0x63
++    if-ne v1, v3, :check_button_y
++    if-nez v2, :button_x_up
++    # Use exact coordinates: jump at (414, 688)
++    const/high16 v3, 0x43cf0000    # 414.0f
++    const/high16 v4, 0x442c0000    # 688.0f
++    const/4 v5, 0x0    # ACTION_DOWN
++    const/4 v6, 0x3    # pointer id 3 for Button X (same as Button A)
++    invoke-static {v5, v6, v3, v4}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    return v0
++    :button_x_up
++    # Use exact coordinates: jump at (414, 688)
++    const/high16 v3, 0x43cf0000    # 414.0f
++    const/high16 v4, 0x442c0000    # 688.0f
++    const/4 v5, 0x1    # ACTION_UP
++    const/4 v6, 0x3    # pointer id 3 for Button X (same as Button A)
++    invoke-static {v5, v6, v3, v4}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    return v0
++
++    :check_button_y
++    # Check for Button Y (100)
++    const/16 v3, 0x64
++    if-ne v1, v3, :check_l1_l2_r1_r2
++    if-nez v2, :button_y_up
++    # Use exact coordinates: jump at (414, 688)
++    const/high16 v3, 0x43cf0000    # 414.0f
++    const/high16 v4, 0x442c0000    # 688.0f
++    const/4 v5, 0x0    # ACTION_DOWN
++    const/4 v6, 0x3    # pointer id 3 for Button Y (same as Button A)
++    invoke-static {v5, v6, v3, v4}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    return v0
++    :button_y_up
++    # Use exact coordinates: jump at (414, 688)
++    const/high16 v3, 0x43cf0000    # 414.0f
++    const/high16 v4, 0x442c0000    # 688.0f
++    const/4 v5, 0x1    # ACTION_UP
++    const/4 v6, 0x3    # pointer id 3 for Button Y (same as Button A)
++    invoke-static {v5, v6, v3, v4}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    return v0
+ 
++    :check_l1_l2_r1_r2
++    # Check for L1 (102) or L2 (104) - both trigger left movement
++    const/16 v3, 0x66    # L1 = 102
++    if-ne v1, v3, :check_l2
++    # L1 pressed - trigger left movement
++    if-nez v2, :l1_up
++    # L1 down - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleLeftPress()V
++    return v0
++    :l1_up
++    # L1 up - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleLeftRelease()V
++    return v0
++
++    :check_l2
++    # Check for L2 (104) - triggers left movement
++    const/16 v3, 0x68    # L2 = 104
++    if-ne v1, v3, :check_r1
++    # L2 pressed - trigger left movement
++    if-nez v2, :l2_up
++    # L2 down - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleLeftPress()V
++    return v0
++    :l2_up
++    # L2 up - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleLeftRelease()V
++    return v0
++
++    :check_r1
++    # Check for R1 (103) - triggers right movement
++    const/16 v3, 0x67    # R1 = 103
++    if-ne v1, v3, :check_r2
++    # R1 pressed - trigger right movement
++    if-nez v2, :r1_up
++    # R1 down - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleRightPress()V
++    return v0
++    :r1_up
++    # R1 up - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleRightRelease()V
++    return v0
++
++    :check_r2
++    # Check for R2 (105) - triggers right movement
++    const/16 v3, 0x69    # R2 = 105
++    if-ne v1, v3, :normal_handling
++    # R2 pressed - trigger right movement
++    if-nez v2, :r2_up
++    # R2 down - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleRightPress()V
++    return v0
++    :r2_up
++    # R2 up - use priority logic
++    invoke-static {}, Lcom/devolver/downwell_rerelease/GamepadHandler_API12;->handleRightRelease()V
++    return v0
++
++    :normal_handling
++    # Normal gamepad handling for other keys
++    .line 273
++    move v1, v2
++
+     if-nez v1, :cond_0
+ 
+     .line 275
+@@ -176,6 +387,77 @@
+     return v0
+ .end method
+ 
++# Helper method to handle left button press
++.method private static handleLeftPress()V
++    .locals 4
++    
++    # Cancel right if it's active by sending right up first
++    const/high16 v0, 0x43060000    # 134.0f (right button X)
++    const/high16 v1, 0x442c0000    # 688.0f (button Y)
++    const/4 v2, 0x1    # ACTION_UP
++    const/4 v3, 0x2    # pointer id 2 for right
++    invoke-static {v2, v3, v0, v1}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    
++    # Send left touch down
++    const/high16 v0, 0x42080000    # 34.0f (left button X)
++    const/high16 v1, 0x442c0000    # 688.0f (button Y)
++    const/4 v2, 0x0    # ACTION_DOWN
++    const/4 v3, 0x1    # pointer id 1 for left
++    invoke-static {v2, v3, v0, v1}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    
++    return-void
++.end method
++
++# Helper method to handle left button release
++.method private static handleLeftRelease()V
++    .locals 4
++    
++    # Send left touch up
++    const/high16 v0, 0x42080000    # 34.0f (left button X)
++    const/high16 v1, 0x442c0000    # 688.0f (button Y)
++    const/4 v2, 0x1    # ACTION_UP
++    const/4 v3, 0x1    # pointer id 1 for left
++    invoke-static {v2, v3, v0, v1}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    
++    return-void
++.end method
++
++# Helper method to handle right button press
++.method private static handleRightPress()V
++    .locals 4
++    
++    # Cancel left if it's active by sending left up first
++    const/high16 v0, 0x42080000    # 34.0f (left button X)
++    const/high16 v1, 0x442c0000    # 688.0f (button Y)
++    const/4 v2, 0x1    # ACTION_UP
++    const/4 v3, 0x1    # pointer id 1 for left
++    invoke-static {v2, v3, v0, v1}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    
++    # Send right touch down
++    const/high16 v0, 0x43060000    # 134.0f (right button X)
++    const/high16 v1, 0x442c0000    # 688.0f (button Y)
++    const/4 v2, 0x0    # ACTION_DOWN
++    const/4 v3, 0x2    # pointer id 2 for right
++    invoke-static {v2, v3, v0, v1}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    
++    return-void
++.end method
++
++# Helper method to handle right button release
++.method private static handleRightRelease()V
++    .locals 4
++    
++    # Send right touch up
++    const/high16 v0, 0x43060000    # 134.0f (right button X)
++    const/high16 v1, 0x442c0000    # 688.0f (button Y)
++    const/4 v2, 0x1    # ACTION_UP
++    const/4 v3, 0x2    # pointer id 2 for right
++    invoke-static {v2, v3, v0, v1}, Lcom/yoyogames/runner/RunnerJNILib;->TouchEvent(IIFF)V
++    
++    return-void
++.end method
++
++
+ .method public HandleMotionEvent(Landroid/view/MotionEvent;)Z
+     .locals 8
+     .annotation build Landroid/annotation/SuppressLint;
